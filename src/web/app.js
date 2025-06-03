@@ -29,6 +29,11 @@ for (const format of Object.keys(engines)) {
   optOut.textContent = format;
   outputSelect.appendChild(optOut);
 }
+// Option to convert to all other formats
+const optAll = document.createElement('option');
+optAll.value = 'All';
+optAll.textContent = 'All Formats';
+outputSelect.appendChild(optAll);
 // Set default selections
 inputSelect.value = "Markdown";
 outputSelect.value = "HTML";
@@ -42,22 +47,36 @@ convertBtn.addEventListener('click', () => {
   const outFormat = outputSelect.value;
   const inputText = inputTextArea.value;
   try {
-    // Prevent conversions between fundamentally different format types (document vs data)
+    // Format categories to restrict cross-type conversions
     const docFormats = ["Markdown", "HTML", "AML"];
     const dataFormats = ["JSON", "YAML", "TOML", "CSV"];
-    const crossType = (docFormats.includes(inFormat) && dataFormats.includes(outFormat)) ||
-                      (dataFormats.includes(inFormat) && docFormats.includes(outFormat));
-    if (crossType) {
-      throw new Error("Conversion between document and data formats is not supported.");
-    }
 
     // Parse input using the selected format engine
     const engineIn = engines[inFormat];
     const intermediate = engineIn.parse(inputText);
-    // Generate output using the target format engine
-    const engineOut = engines[outFormat];
-    const result = engineOut.stringify(intermediate);
-    outputTextArea.value = result;
+
+    const isCrossType = (target) => (
+      (docFormats.includes(inFormat) && dataFormats.includes(target)) ||
+      (dataFormats.includes(inFormat) && docFormats.includes(target))
+    );
+
+    if (outFormat === 'All') {
+      const outputs = [];
+      for (const fmt of Object.keys(engines)) {
+        if (fmt === inFormat) continue;
+        if (isCrossType(fmt)) continue;
+        const result = engines[fmt].stringify(intermediate);
+        outputs.push(`=== ${fmt} ===\n${result}`);
+      }
+      outputTextArea.value = outputs.join('\n\n');
+    } else {
+      if (isCrossType(outFormat)) {
+        throw new Error('Conversion between document and data formats is not supported.');
+      }
+      const engineOut = engines[outFormat];
+      const result = engineOut.stringify(intermediate);
+      outputTextArea.value = result;
+    }
   } catch (err) {
     outputTextArea.value = "Error: " + err.message;
     console.error(err);

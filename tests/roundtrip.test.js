@@ -6,7 +6,6 @@ global.Node = dom.window.Node;
 
 import { strict as assert } from 'assert';
 import * as fc from 'fast-check';
-import * as jsonEngine from '../src/engines/json.js';
 import * as yamlEngine from '../src/engines/yaml.js';
 import * as tomlEngine from '../src/engines/toml.js';
 import * as csvEngine from '../src/engines/csv.js';
