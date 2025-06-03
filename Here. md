@@ -1,0 +1,103 @@
+Understood. Let’s drop in the minimum Node artefacts the repo still needs so setup.sh can run end-to-end:
+
+⸻
+
+1 ▸ package.json (put at repo root)
+
+{
+  "name": "format-converter",
+  "version": "0.1.0",
+  "description": "Web-based any-to-any document/data format converter",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "serve -s src/web -l 8080",
+    "test": "mocha tests/**/*.js",
+    "lint": "eslint . --ext .js",
+    "prepublishOnly": "npm run lint && npm test"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "@iarna/toml": "^3.0.0",
+    "marked": "^11.0.0",
+    "turndown": "^7.1.2",
+    "serve": "^14.2.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "mocha": "^10.4.0",
+    "fast-check": "^3.17.0",
+    "jsdom": "^24.0.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
+
+Why these packages?
+
+Package	Role
+marked	Markdown → HTML parser
+turndown	HTML → Markdown generator
+js-yaml	YAML parse/dump
+@iarna/toml	TOML parse/dump
+serve	Tiny static server for npm start
+eslint, mocha, fast-check, jsdom	Linting + unit / property tests
+
+Tip: commit this file first, then run npm install (or npm ci in CI).
+
+⸻
+
+2 ▸ .eslintrc.json (root)
+
+{
+  "env": { "browser": true, "es2021": true, "node": true },
+  "extends": "eslint:recommended",
+  "parserOptions": { "ecmaVersion": 12, "sourceType": "module" },
+  "rules": { }
+}
+
+
+⸻
+
+3 ▸ tests bootstrap
+
+If tests/ is still empty, add a smoke test so npm test passes until you flesh out the full suite.
+
+tests/smoke.test.js
+
+import { strict as assert } from 'assert';
+describe('smoke-test', () => {
+  it('sanity check', () => assert.equal(1+1, 2));
+});
+
+
+⸻
+
+4 ▸ Update setup.sh (optional quality-of-life)
+
+Replace the dependency-install block with:
+
+if [[ -f package-lock.json ]]; then
+  npm ci
+else
+  npm install --no-audit --loglevel=error
+fi
+
+This avoids the interactive “funding” banner and speeds CI.
+
+⸻
+
+5 ▸ Commit order
+	1.	package.json (+ optional package-lock.json if you lock now)
+	2.	.eslintrc.json
+	3.	tests/ smoke-test
+	4.	setup.sh
+
+Push those, then try:
+
+./setup.sh --no-docker
+
+You should see green ✔ for install, lint, tests. After that, the full Docker build (./setup.sh) will succeed as well.
+
+Let me know if you need a pre-generated package-lock.json or further tweaks!
