@@ -1,0 +1,173 @@
+Emphasis Cues Support in FormatConverter
+
+Current Structure and Format Handling
+
+Repository Overview: FormatConverter is designed with modular engine components for each format and a shared intermediate representation. Each engine provides parse(input) and stringify(data) functions to convert between raw text and the intermediate data model ￼. For data serialization formats (JSON, YAML, TOML, CSV), the intermediate form is a plain JavaScript object/array tree (like the result of JSON.parse). For document/markup formats (Markdown, HTML, AML), the intermediate form is a DOM-like tree of elements (with tags, attributes, and children) and text nodes ￼. This design lets the app parse content from one format into the intermediate model, then output it into any other format’s syntax ￼. In practice, however, the current UI restricts conversions between “document” and “data” formats (e.g. Markdown to JSON) by throwing an error ￼. This means that while Markdown ↔ HTML ↔ AML conversions preserve text structure (headings, lists, bold, italic, etc.), converting those rich text formats to JSON/YAML is not yet directly supported in the UI. The emphasis formatting present in markup formats is therefore not currently expressible in JSON/YAML outputs under the default setup.
+
+Existing Emphasis Handling: Within the markup formats, FormatConverter does handle emphasis (text styles) in conversions. For example, a Markdown snippet with **bold** or *italic* text will be parsed (via a Markdown library) into the intermediate DOM-like structure, where it becomes an element node (likely <strong> or <em> in the DOM) with a text child ￼. The HTML engine then serializes that to <strong>…</strong> or <em>…</em> in HTML output, preserving the emphasis ￼. Similarly, converting HTML <strong>Word</strong> to Markdown yields **Word** ￼. AML (Another Markup Language) is an XML-like format that also supports emphasis explicitly – for example, the included example.aml shows usage of an <emphasis> element (with a type attribute to distinguish bold vs italic) ￼. Currently, the AML engine simply delegates parsing and serialization to the HTML engine (treating AML tags as generic DOM elements) ￼. This means AML content like <emphasis type="bold">Bold text</emphasis> will round-trip through the intermediate model, but the conversion logic doesn’t yet special-case these tags. In fact, the AML engine’s stringify just calls the HTML stringify and returns that string ￼, so an AML document might be output with HTML tags (e.g. <strong>) instead of <emphasis> if no further adjustment is made. Despite these limitations, the core framework is in place to represent emphasized text in the intermediate structure – we just need to extend it to be emphasis-aware across all formats.
+
+Designing an Emphasis-Aware Intermediate Model
+
+To achieve lossless emphasis conversion between JSON, YAML, AML (XML), and other formats, we propose introducing a unified, emphasis-aware representation in the intermediate data model. The idea is to explicitly model emphasis as a distinct node type or attribute in the intermediate tree, rather than relying on raw format-specific tags. This will allow every engine to recognize and preserve emphasis cues, even when converting to formats that don’t natively support rich text styling.
+	•	Define a Unified Emphasis Node: In the intermediate representation (the JS object tree), introduce a convention for emphasis. For example, we can use an object structure like:
+
+{ type: "emphasis", level: "strong", children: [ … ] }
+
+Here, type: "emphasis" denotes an emphasis node. A custom property (e.g. level) can describe the intensity or style of emphasis. For simplicity, we might use level: "strong" for bold/strong emphasis and level: "moderate" (or "italic") for italic/slight emphasis. This unified node will represent any emphasized text segment, regardless of how the source format marks it (bold, italic, all-caps, etc.). Child nodes of this emphasis node will be the text (or nested elements) that should be emphasized. By having a dedicated emphasis node in the tree, we ensure the concept of “emphasized text” is carried through conversions, even into JSON/YAML where formatting would otherwise be lost.
+
+	•	Mapping Format-Specific Markup to Emphasis Nodes: Each format engine needs to translate its own emphasis notation into the unified node:
+	•	Markdown Parse: Detect Markdown emphasis syntax (** ** for bold, * * for italic). The Markdown engine currently uses a third-party parser that likely produces HTML or an AST; we can post-process that output. When parsing, replace <strong> or <b> tags in the intermediate DOM with {type:"emphasis", level:"strong", ...} nodes, and <em> or <i> with {type:"emphasis", level:"moderate", ...}. This could be done by hooking into the DOM-to-object conversion routine. For example:
+
+// Pseudocode inside Markdown/HTML parse logic:
+if (node.nodeType === Node.ELEMENT_NODE) {
+  const tag = node.tagName.toLowerCase();
+  if (tag === "strong" || tag === "b") {
+    return { type: "emphasis", level: "strong", children: node.childNodes.map(nodeToObj) };
+  }
+  if (tag === "em" || tag === "i") {
+    return { type: "emphasis", level: "moderate", children: node.childNodes.map(nodeToObj) };
+  }
+  // ... handle <emphasis> tags from AML:
+  if (tag === "emphasis") {
+    // Map AML's emphasis tag to our unified node
+    const style = node.getAttribute("type"); 
+    const level = (style === "bold") ? "strong" : "moderate";  // assume default or "italic" => moderate
+    return { type: "emphasis", level: level, children: node.childNodes.map(nodeToObj) };
+  }
+  // ...other tags...
+}
+
+With this, a Markdown input like **RAPID** response would parse into an intermediate node {type:"emphasis", level:"strong", children:[{text:"RAPID"}]} rather than a generic <strong> element. Likewise, *RAPID* would yield {type:"emphasis", level:"moderate", ...}.
+
+	•	HTML/XML/AML Parse: The HTML engine uses the browser DOM. We extend its object conversion to recognize emphasis tags as well. As above, convert <strong>/<b> to level:"strong" emphasis nodes, <em>/<i> to level:"moderate", and specifically handle AML’s <emphasis> tag. AML content is parsed via an XML DOM and then fed through the HTML engine ￼, so without changes an AML <emphasis> comes through as an unknown tag. We add logic to treat <emphasis type="bold"> as level:"strong" and <emphasis type="italic"> (or no type) as level:"moderate" in the intermediate form. After these parse-phase mappings, all formats will produce the same internal representation for an emphasized segment – a unified emphasis node.
+
+	•	Intermediate Structure Example: After parsing, the emphasis-aware intermediate tree might look like this (regardless of source format):
+
+{
+  tag: "paragraph",
+  children: [
+    { text: "Please execute the task " },
+    { 
+      type: "emphasis", 
+      level: "strong",
+      children: [ { text: "RAPIDly" } ]
+    },
+    { text: " and accurately." }
+  ]
+}
+
+In this example, the word “RAPIDly” is marked for strong emphasis. This structure can be thought of as a small DOM: a paragraph containing three nodes (text, an emphasis element wrapping “RAPIDly”, and another text node). The emphasis node carries semantic info (level: "strong") to ensure we know how strong the emphasis should be in each format.
+
+Proposed Modifications for Emphasis Support
+
+With the above model in mind, we need to adjust several components of the repository to handle emphasis cues uniformly:
+
+Intermediate Model & Engine Interface
+	1.	Augment the Intermediate Data Model: Implement the emphasis node format (as described above) in the data model. This doesn’t require a new global data structure, just a convention in how the engine modules produce and consume objects. We should document that an object with type: "emphasis" in the intermediate tree indicates emphasized content. Engine modules should expect and honor this. This addition aligns with the existing architecture since it’s simply a richer use of the nested JS object approach (fully serializable to JSON/YAML). Notably, this unified node ensures lossless representation – an emphasized word remains distinctly marked in the intermediate form rather than being just part of a plain string.
+	2.	Allow Cross-Type Conversions for Structured Prompts: Update the conversion flow to handle document ↔ data conversions when the data format is being used to carry structured prompt content. Currently, the app prevents cross-type output entirely ￼. We can relax this restriction for JSON and YAML outputs when the input is a document format, by serializing the intermediate document tree to a JSON/YAML structure (see below). Similarly, allow JSON/YAML input to feed the intermediate model if the JSON/YAML content is structured as a prompt. To stay safe, we might still block truly incompatible conversions (e.g. converting an arbitrary JSON object into Markdown doesn’t make sense unless it follows a prompt schema). In practice, this means detecting if a JSON/YAML input has the expected prompt structure (like a root element or known keys like text or children), and only then treating it as a document. This adjustment implements the spec’s suggestion to provide a structured representation for cross-type conversions ￼ rather than a blanket error.
+
+Markdown Engine Updates
+	•	Parsing: If not already done by the Markdown library, ensure that after parsing Markdown text, we map emphasis syntax to the unified emphasis node. As described, intercept <strong> and <em> during conversion to objects and translate them to {type:"emphasis", level:...}. The Markdown example in the repo shows bold/italic content ￼, which should now produce our emphasis nodes internally.
+	•	Stringifying: Extend the Markdown generator to output emphasis markdown for any emphasis nodes in the intermediate data. If we’re using a library like Turndown on a DOM, we might register custom rules for our emphasis node type. Alternatively, if implementing manually: for a node {type:"emphasis", level:"strong"}, output ** around its children’s Markdown text; for level:"moderate", use * (single asterisk). For example, the intermediate structure for RAPIDly (strong) would stringify to **RAPIDly** in Markdown. By handling type:"emphasis" explicitly, we ensure that an emphasis introduced in another format (say, YAML or AML) is properly realized in Markdown output as ** ** or * *. This keeps the emphasis cue visible to end-users writing or reading Markdown prompts.
+
+HTML & AML Engine Updates
+	•	HTML Parsing: Enhance the HTML engine’s DOM traversal to recognize emphasis tags and map them. As outlined earlier, detect <b>/<strong> and <i>/<em> in the DOM and convert them to emphasis nodes with appropriate level. The HTML spec has only these two levels of text emphasis (bold and italics), but this covers the typical use cases. (If additional cues like underline or all-caps were considered “emphasis,” we could handle them if needed – e.g. <u> could map to a different emphasis style or a generic emphasis as well.)
+	•	HTML Stringifying: Modify the HTML generator to output standard HTML emphasis tags when encountering an emphasis node. Since our intermediate no longer carries raw <strong> or <em> tags (it has a generic emphasis node instead), we decide on an output mapping: for level:"strong" use <strong>...</strong>, for level:"moderate" use <em>...</em> (or <i> and <b>, but <em>/<strong> are semantically preferred). This way, no matter where the emphasis node came from, the HTML output will have the correct tags. For instance, if a JSON prompt indicated a strong emphasis, converting to HTML would yield <strong>...</strong> around that text.
+	•	AML Parsing: The AML engine currently uses an XML parser and then hands off to the HTML logic ￼. We should ensure that when the XML DOM (which will include <emphasis> elements) is converted, our HTML parse logic handles those <emphasis> tags as described. That means before blindly treating it as HTML, we might traverse the XML DOM or intercept after serialization. A robust approach is to extend the HTML engine’s parsing logic (as above) to also check for tag name "emphasis". Because AML’s structure for emphasis differs (using a type attribute), we handle that: map <emphasis type="bold">…</emphasis> to level:"strong", and <emphasis type="italic">…</emphasis> (or no type) to level:"moderate". This ensures no information is lost – e.g., an AML document emphasizing a word will become an intermediate emphasis node with the correct level flag.
+	•	AML Stringifying: To generate AML output with proper tags, we can no longer rely on HTML’s stringify alone. We should implement a post-processing step or a custom stringify for AML to translate the generic emphasis node into an <emphasis> element. One strategy is to reuse HTML output then do text replacements (e.g., replace <strong>…</strong> with <emphasis type="bold">…</emphasis>), but a safer approach is a custom traversal: iterate through the intermediate tree and construct an XML string. For each node:
+	•	If type === "emphasis", output <emphasis type="bold"> for strong level (or type="italic" for moderate), then output its children, then close </emphasis>.
+	•	Handle other nodes: e.g., HTML’s <p> corresponds to AML’s <paragraph>, <h1> to <heading level="1">, etc. (The AML format uses semantic tags like <heading> with level attributes, as seen in the example ￼, instead of HTML’s numeric <h1>…<h3> tags. We should incorporate those mappings for completeness in AML conversion.)
+	•	Close all tags appropriately.
+By implementing these mappings, converting from Markdown or HTML into AML will produce the exact tags defined by AML (including <emphasis> tags) instead of leaving HTML tags. This extension of the AML engine was hinted as a “future adjustment” in the code ￼ – we are now providing it. After this change, a bold text segment in any source format will end up as <emphasis type="bold">...</emphasis> in AML output, and likewise italic as type="italic", matching the AML schema.
+
+JSON & YAML Engine Handling
+	•	Structured Representation of Emphasis: JSON and YAML don’t have native markup, so we use them to carry the structured prompt data. We’ll leverage the fact that our intermediate model is a JSON-serializable object tree. The JSON engine’s stringify can be enhanced to detect when it’s given a document tree (for example, the root is an object with a known structure like a tag or a children property) and then output a JSON string representing that object. In practice, since the intermediate for documents is already a plain JS object, calling JSON.stringify(intermediate, null, 2) may be sufficient to produce a JSON text. The key is to ensure no functions or DOM node references are present – our unified model avoids that by using simple objects. We should modify the conversion logic to allow this path when appropriate, instead of erroring out. For YAML, similarly use a YAML library to dump the object. The round-trip tests in the repo already show that arbitrary objects can go JSON→YAML→JSON without loss ￼, so using JSON/YAML to encode our prompt tree will also preserve all structure (including emphasis markers) through conversions ￼.
+	•	JSON/YAML Parsing for Prompts: On the parse side, if the user provides a JSON or YAML input that is meant to represent a prompt with emphasis, the JSON engine will parse it into a JavaScript object (e.g., an array of segments or a nested structure of tags). We then need to interpret that object as the intermediate format directly. For example, if the JSON input is:
+
+{ "prompt": [
+    {"text": "Execute "},
+    {"type": "emphasis", "level": "strong", "children": [ {"text": "RAPIDly"} ]},
+    {"text": " and accurately."}
+]}
+
+the JSON engine’s parse would produce an object with a key "prompt" pointing to a list of segment objects. We could define that if a top-level "prompt" key exists (or generally if an object or array contains our expected keys like "type": "emphasis" or "text"), we treat that object as the intermediate representation itself. In this example, the value of "prompt" could be taken as the children of an implicit root, or we could require the JSON to directly represent the root node. The exact schema can be decided for usability, but the simplest is to allow an array of nodes or a root object with children. YAML would work analogously (just a different syntax for the same structure). By supporting this, users can author prompts in JSON/YAML with emphasis by following the structure, and the converter will parse it into the internal model seamlessly.
+
+	•	Example JSON/YAML Schema: We recommend a list-of-segments approach for JSON/YAML to keep it user-friendly. For instance:
+	•	JSON:
+
+[
+  { "text": "Execute the task " },
+  { "emphasis": "strong", "text": "RAPIDly" },
+  { "text": " and accurately." }
+]
+
+Here, each array element is either a plain text chunk or an emphasized chunk. We use a shorthand: an object with an "emphasis" key and a "text" value indicates that text should be emphasized. (Internally, this would be converted to {type:"emphasis", level:"strong", children:[{text: "..."}]}. We could also allow nested children for complex emphasis, but for simple usage one text per emphasis is fine.) This format is intuitive: a normal text segment versus an emphasized segment is clearly marked. YAML would be similar:
+
+	•	YAML:
+
+- text: "Execute the task "
+- emphasis: strong
+  text: "RAPIDly"
+- text: " and accurately."
+
+This conveys the same list of segments with an emphasized word. Under the hood, the YAML engine will parse this into the same object array structure.
+We will implement support such that both of the above would be parsed into the intermediate structure shown earlier. On generation, if the intermediate data is a document tree and the target is JSON/YAML, we produce a structured listing. (We might choose to always output a consistent shape, e.g. always an array or always an object with a prompt field, depending on what the integration expects. The key is that all emphasis nodes and text nodes are represented.)
+
+Ensuring Lossless Conversion & Integration Alignment
+
+With these modifications, emphasis cues are preserved end-to-end. A bold word in Markdown becomes an emphasis node in the intermediate model, which can then be serialized to JSON (as a marked segment), to YAML (same structure), to AML (as <emphasis type="bold">), or back to Markdown/HTML without losing the fact that it was bold. Each format uses its native way of indicating emphasis, but our intermediate ties them together. Crucially, converting from one format to another and back will return the emphasis markers to their original form, satisfying losslessness. For example, a word marked **URGENT** in Markdown would convert to AML and come back still as **URGENT**, not plain text, because it was carried through as an emphasis node (and not flattened) in intermediate.
+
+Code Integration: These changes can be implemented in a maintainable way, consistent with the project’s extensible design. Each engine module is updated in isolation to handle the new emphasis node, which aligns with the blueprint’s requirement to isolate format-specific logic ￼ ￼. We are not breaking the core flow; we’re extending the parse/stringify implementations and adjusting a bit of the conversion dispatcher logic. This means the repository structure remains clean (no monolithic conversion code – we still encapsulate changes in src/engines/markdown.js, html.js, etc.). The Prompt-Castle integration blueprint likely emphasizes such modular extensibility and completeness, and our approach follows that. We’ve effectively added a feature across formats without altering the fundamental architecture. In fact, enabling JSON/XML as carriers for prompt content was a planned future improvement ￼ – our emphasis-supporting intermediate model is a step in that direction, ensuring the system can handle rich prompt data consistently.
+
+Testing & Validation: To align with the project’s testing philosophy, we would introduce new tests focusing on emphasis preservation. For instance:
+	•	Round-trip tests: Construct a prompt with emphasis (bold and italic) in one format, convert to another, then back, and assert that the emphasis markers still exist and are equivalent. e.g., Markdown → JSON → Markdown should return the original ** ** around the same text. Similarly YAML → AML → YAML should round-trip an emphasis tag/field.
+	•	Cross-format conversions: Test converting an emphasized prompt through all format pairs that make sense (Markdown → AML, AML → JSON, JSON → HTML, etc.) to ensure no format drops or mis-translates the emphasis. Because our intermediate is uniform, each of these conversions should carry the emphasis through. We can leverage the existing structure: for example, use the All Formats output option to verify that a single input yields emphasis in every format’s output. The result might show, say, <emphasis> tags in AML, ** ** in Markdown, and "emphasis":"strong" in JSON, all reflecting the same intended emphasis.
+
+By passing these tests, we gain confidence that the conversion is truly lossless with respect to emphasis cues – a critical requirement now that prompts may contain nuanced instructions or highlights (like “respond RAPIDly” to indicate urgency).
+
+Using Emphasis in Each Format – Examples
+
+With the above enhancements, authors can use any supported format to include emphasis in their prompts. Here are examples of how to represent the phrase “This is RAPID action” (where “RAPID” should be emphasized strongly) in different formats, and how FormatConverter would handle them:
+	•	Markdown: Use standard Markdown syntax for emphasis. For strong emphasis (bold), wrap the word in double asterisks:
+
+This is **RAPID** action.
+
+FormatConverter will parse **RAPID** into an emphasis node (level=strong) and preserve it through conversions. Converting to HTML yields <strong>RAPID</strong>, to AML yields <emphasis type="bold">RAPID</emphasis>, and to JSON/YAML it becomes a structured marker (see below).
+
+	•	AML (XML-like): Use the <emphasis> element as in the AML specification. For example:
+
+<paragraph>This is <emphasis type="bold">RAPID</emphasis> action.</paragraph>
+
+Here, type="bold" indicates a strong emphasis. If a milder emphasis (italic) was desired, type="italic" could be used (or omitted if italic is the default). The converter will recognize this tag ￼ and map it to the unified model. Output to Markdown would become **RAPID**, and JSON/YAML will include an emphasis marker. (If using a generic XML format or a future XML engine, one could similarly use an <emphasis> tag or whatever tag is defined for emphasis in that schema. The converter’s mapping can be extended to those tags as needed.)
+
+	•	JSON: Represent the prompt as a JSON structure with explicit segments. For instance:
+
+{
+  "prompt": [
+    { "text": "This is " },
+    { "emphasis": "strong", "text": "RAPID" },
+    { "text": " action." }
+  ]
+}
+
+In this JSON, the prompt is an array of parts. The middle part is an object denoting an emphasized text: it has an "emphasis": "strong" field alongside the text “RAPID”. When the JSON engine parses this, it produces the intermediate tree with an emphasis node for “RAPID”. All other format engines will then output it with proper emphasis (e.g. to AML or HTML as noted above). Conversely, if you convert from a markup format to JSON, the converter will output this kind of object structure. (We could also output just an array at the top level instead of wrapping in a "prompt" object – the exact JSON layout can be adjusted by user preference or blueprint spec. The essential part is using an object to flag emphasized text.)
+
+	•	YAML: YAML uses a similar structure in a more human-readable form. The same prompt in YAML could be:
+
+prompt:
+  - text: "This is "
+  - emphasis: strong
+    text: "RAPID"
+  - text: " action."
+
+This conveys the same data: a list under “prompt” where the second item has an emphasis marker. The converter will interpret this into the intermediate model just like the JSON case. If you were to convert an AML or Markdown prompt into YAML, you’d get an output in this form. For example, converting <emphasis type="bold">RAPID</emphasis> into YAML might yield something like the above (possibly without the outer prompt: key, depending on implementation).
+
+By introducing a clear intermediate representation for emphasis and extending each format’s engine to honor it, FormatConverter will enable users to freely emphasize content across JSON, YAML, XML/AML, etc., with no loss of information. A user can now highlight important terms or phrases in their prompts using whichever format is convenient, and trust that those emphasis cues (be it **RAPID** in Markdown, a special <emphasis> tag in XML, or a JSON/YAML field) will persist through all conversions. This robust emphasis support fits cleanly into the existing architecture ￼ and aligns with the project’s goal of preserving content structure (like bold/italic text) across format transformations ￼. The result is an integration-ready solution where formatting nuances in prompts – such as urgency or importance indicated by emphasis – are preserved end-to-end, consistent with the user’s integration blueprint and requirements for lossless, emphasis-aware conversion.
+
+Sources:
+	•	Project Specification – Intermediate Representation and format support ￼ ￼
+	•	Conversion Implementation – Cross-type conversion handling in app.js ￼ ￼
+	•	AML Example – Usage of <emphasis> tags for bold/italic in AML ￼
+	•	Markdown Example – Bold and italic syntax in example.md ￼
+	•	Engine Code – AML engine deferring to HTML engine ￼ ￼
+	•	Tests – Markdown ↔ HTML emphasis preservation in round-trip tests ￼
