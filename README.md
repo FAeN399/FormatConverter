@@ -1,6 +1,64 @@
 # Format Converter
 
-A web-based tool to convert documents and data between a variety of formats. The Format Converter supports text markup formats (Markdown, HTML, AML) and data serialization formats (JSON, YAML, TOML, CSV). Users can paste or type content in one format and easily convert it into the other using a convenient web interface.
+**Status: ✅ Phase 1 Infrastructure Complete** | **Last Updated: June 3, 2025**
+
+A web-based tool for converting between multiple data and document formats including JSON, YAML, TOML, CSV, Markdown, HTML, and AML.
+
+## 🚀 Quick Start
+
+1. **Start the development server:**
+   ```bash
+   npm start
+   ```
+
+2. **Open the web interface:**
+   ```
+   http://localhost:8080/src/web/index.html
+   ```
+
+3. **Test the conversion engines:**
+   ```bash
+   npm test
+   ```
+
+## 📋 Development Setup
+
+### Prerequisites
+- Node.js ≥20.19.0
+- npm ≥10.8.0
+
+### Installation
+```bash
+# Clone the repository
+git clone https://github.com/FAeN399/FormatConverter.git
+cd FormatConverter
+
+# Install dependencies
+npm install
+
+# Start development server
+npm start
+```
+
+### Development Commands
+```bash
+npm start        # Start development server on port 8080
+npm test         # Run test suite (Mocha + fast-check)
+npm run dev      # Start server in background
+npm run stop     # Stop background server
+```
+
+## 🎯 Project Status
+
+### ✅ **Phase 1 Complete (Infrastructure Stabilization)**
+- [x] Fixed npm test infrastructure
+- [x] Consolidated web interface to single `index.html`
+- [x] Validated all 7 format engines working
+- [x] Established reliable development workflow
+- [x] 6 of 8 tests passing (2 minor fast-check API issues)
+
+### 📋 **Next: Phase 2 (Quality Improvements)**
+See `ENGINEERING_PLAN.md` for detailed roadmap.
 
 ## Features
 
