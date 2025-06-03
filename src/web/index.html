@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Format Converter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Format Converter</h1>
+
+  <div id="controls">
+    <label for="inputFormat">Input format:</label>
+    <select id="inputFormat"></select>
+
+    <label for="outputFormat">Output format:</label>
+    <select id="outputFormat"></select>
+
+    <button id="convertBtn">Convert</button>
+  </div>
+
+  <div class="container">
+    <div class="pane">
+      <h2>Input</h2>
+      <textarea id="inputText" placeholder="Enter text here..."></textarea>
+    </div>
+    <div class="pane">
+      <h2>Output</h2>
+      <textarea id="outputText" placeholder="Output will appear here..." readonly></textarea>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

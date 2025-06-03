@@ -1,0 +1,25 @@
+{
+  "name": "format-converter",
+  "version": "0.1.0",
+  "description": "A web-based converter between Markdown, HTML, JSON, YAML, TOML, CSV, AML formats.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "serve -s src/web -l 8080",
+    "test": "mocha tests/**/*.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "js-yaml": "^4.3.0",
+    "@iarna/toml": "^3.0.0",
+    "marked": "^4.3.0",
+    "turndown": "^7.1.1"
+  },
+  "devDependencies": {
+    "serve": "^14.0.1",
+    "mocha": "^10.2.0",
+    "fast-check": "^3.7.0",
+    "eslint": "^8.35.0",
+    "jsdom": "^21.1.0"
+  }
+}
