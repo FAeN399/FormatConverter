@@ -67,6 +67,7 @@ Then open `http://localhost:8080/src/web/index.html` in your browser.
 
 1. Select the input format of the text you will paste in the left text area.
 2. Select the desired output format in the right dropdown.
+   - Choose **All Formats** to generate output in every compatible format.
 3. Enter or paste your content in the input text area.
 4. Click **Convert**. The converted output will appear in the right text area.
 5. If the input text is not valid for the selected input format, an error message will be shown.

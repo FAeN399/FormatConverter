@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "serve -s src/web -l 8080",
-    "test": "mocha tests/**/*.js",
+    "test": "mocha --experimental-vm-modules tests/**/*.js",
     "lint": "eslint ."
   },
   "dependencies": {
