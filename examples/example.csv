@@ -1,0 +1,4 @@
+name,age,skill1,skill2,skill3,city,country,active
+Alice,30,JavaScript,YAML,JSON,Somewhere,USA,true
+Bob,25,Python,SQL,,New York,USA,false
+Carol,35,Java,C++,Go,London,UK,true

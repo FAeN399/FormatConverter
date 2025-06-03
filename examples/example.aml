@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document>
+    <title>Example AML Document</title>
+    <section type="main">
+        <heading level="1">Example Document</heading>
+        <paragraph>This is a <emphasis>sample</emphasis> AML document demonstrating various markup features.</paragraph>
+        
+        <heading level="2">Features</heading>
+        <list type="unordered">
+            <item><emphasis type="bold">Bold text</emphasis> and <emphasis type="italic">italic text</emphasis></item>
+            <item>Lists and numbered items</item>
+            <item>Code blocks and <code>inline code</code></item>
+        </list>
+        
+        <heading level="3">Code Example</heading>
+        <codeblock language="javascript">
+function hello() {
+  console.log("Hello, World!");
+}
+        </codeblock>
+    </section>
+</document>

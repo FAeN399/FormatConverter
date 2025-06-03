@@ -1,0 +1,9 @@
+name = "Alice"
+age = 30
+skills = ["JavaScript", "YAML", "JSON"]
+active = true
+
+[address]
+street = "123 Main St"
+city = "Somewhere"
+country = "USA"
